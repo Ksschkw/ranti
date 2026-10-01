@@ -1,98 +1,47 @@
 # How I gave my chatbot a hippocampus
 
-Most "memory" in a chatbot is a prompt with a few recalled strings in it. I built one of
-those first. It demoed beautifully and it rotted within a week of real use.
+Most "memory" in a chatbot is a few recalled strings stuffed into a prompt. I built one of those first. Then a real person used it, and it told them it had no long-term memory.
 
-## Why the obvious build fails
+## Why the obvious build rots
 
-The Session 8 brief asks for a chatbot that remembers. The obvious build is a support bot
-that calls `remember()` after each turn and `recall()` before the next one.
+The brief asks for a chatbot that remembers. The obvious build calls `remember()` after each turn and `recall()` before the next. Three things then go wrong, and none of them are Walrus Memory's fault. It stores memories and returns the closest ones. It never claimed to decide which ones deserve the context window.
 
-Three things went wrong, and none of them are Walrus Memory's fault. Walrus Memory stores
-memories and returns the semantically closest ones. It never claimed to decide which ones
-deserve the context window.
+Duplicates. The extractor pulls the same fact out of differently worded sentences, so "allergic to shellfish" ends up stored four times. All four are close matches, so all four get recalled and three waste tokens.
 
-Duplicates. The extractor pulls the same fact out of slightly different sentences, so "Ada
-is allergic to peanuts" ends up stored four times. All four are close matches, so all four
-get recalled and three are wasted tokens.
+Stale values. Preferences change. The old one is still similar, so it is still recalled next to the new one, and the bot answers as if both are current.
 
-Stale values. Preferences change. The old one is still stored, still semantically similar,
-still recalled next to the new one. The bot answers as if both are current.
+Contradictions. "I do not eat meat" and "I had a great steak on Friday" can sit in the store forever. Append-only storage will not choose, and cosine distance does not know there is a conflict.
 
-Contradictions. "I do not eat meat" and "I had a great steak on Friday" can both sit in the
-store forever. Append-only storage will not pick a winner, and cosine distance does not know
-there is a conflict.
-
-I checked the SDK before assuming. High-level `recall()` is top-K by distance with an
-optional cutoff and no recency or importance weighting. A `ScoringWeights` type with
-recency and importance exists, but it is only reachable through `recall_manual`, which
-returns blob ids and no text. The ranking machinery is there; the path most people take
-cannot reach it.
+I checked before assuming. High-level `recall()` is top-K by distance with no recency or importance weighting. A `ScoringWeights` type with both exists, but it is only reachable through `recall_manual`, which returns blob ids and no text. The ranking machinery is there and the path most people take cannot reach it.
 
 ## What I built
 
-Ranti is a memory-first assistant with one memory space and three independently deployed
-surfaces: a Telegram bot, a terminal client, and a browser widget. Each writes to the same
-`owner + namespace`, and every memory is stamped with the surface that produced it, so you
-can watch a fact learned in the terminal get recalled in the browser.
+Ranti is a memory-first assistant with one memory space and three independent surfaces: a Telegram bot, a terminal client, and a browser widget. Each writes to the same owner and namespace, and every memory records which surface produced it.
 
-On top of Walrus Memory I added the layer I was missing: the hippocampus.
+On top of Walrus Memory I added the layer I was missing. On ingest, extract candidate facts, compare each against its nearest neighbours, and classify it as same, update, contradict or new before writing anything. On recall, fetch wide, drop superseded entries, collapse near-duplicate restatements, re-rank by semantic distance plus recency plus importance, then cap to a budget.
 
-On ingest, extract candidate facts, compare each against its nearest existing memories, and
-classify it as same, update, contradict or new before writing anything. Only new and update
-facts are written. An update marks the old memory superseded. A contradiction is surfaced
-for a human instead of being silently appended.
+## What a real user taught me
 
-On recall, fetch a wide candidate set, drop superseded entries, collapse near-duplicate
-restatements, re-rank by semantic distance plus recency plus importance, then cap to a
-budget.
+The first real person sent `/start`. The bot replied: "I don't have long-term memory."
 
-On one real user that skipped <<FILL: duplicates>> duplicate writes and flagged
-<<FILL: contradictions>> contradictions the naive build would have merged straight into the
-context.
+That is the worst possible failure for this product, and no test caught it. My prompt's no-memories branch told the model to say plainly that it had no stored memories, and the model generalised that into denying memory across conversations entirely. The fix was one sentence of prompt and a regression test asserting both halves of the instruction. A demo would never have found it. A person typing the first thing that comes to mind found it immediately.
 
-## The moment it mattered
+## Then I measured what I had assumed
 
-A user mentioned in passing on Telegram that they had changed jobs. Three days later they
-asked the web widget for advice about their work. The old job was still in the store, still
-semantically close to the question. The consolidation layer had marked it superseded, so the
-widget answered from the new one. Small thing. Also the difference between a demo and
-something you keep using.
+Against the live relayer: reply generation 2.3 seconds, `recall()` 1.6 seconds, and `remember_and_wait()` 28.6 seconds. Turns took 81 seconds, because consolidation awaited one blocking write per fact.
 
-## Showing before and after honestly
+So a turn no longer waits for persistence. It accepts each write, records a pending index row, and settles the real blob id in the background. Verified live: 81 seconds down to 18, with the placeholders resolving to real blob ids shortly after. The API reports "accepted, persisting" rather than claiming a memory is stored when it is not.
 
-I did not want to hand-pick screenshots, so the bot generates the comparison itself.
-Every turn stores the memories recalled for it, and `/chat/counterfactual/{turn_id}`
-re-runs the same prompt with memory off and diffs the answers. It also reports when memory
-made no difference, which is most of the time. Memory only earns its latency when it
-changes the answer.
+## The proof I did not expect to need
 
-## What broke
-
-The Python SDK has no `forget` or `delete`. The relayer exposes `POST /api/forget`, but the
-SDK does not wrap it, and the only true deletion path is a wallet-authenticated flow with a
-Node.js example. A Python integration cannot honour a deletion request
-without leaving the SDK.
-
-Nothing lists memories either. `recall()` searches; nothing enumerates. Your local index cannot be
-rebuilt by reading Walrus Memory back. So
-I made the index self-describing: after each turn that changes something, the bot writes a
-compact snapshot of its index as a memory in a companion namespace. Delete the local
-database, restart, and the bot recalls the newest snapshot and rebuilds. The index is data,
-and the data lives in Walrus.
+Walrus Memory cannot list memories, so the local index cannot be rebuilt by reading it back. I made the index self-describing: after each change the bot writes a compact snapshot of its index as a memory in a companion namespace. I deleted every row from the live index so that `/memories` returned zero, then called rebuild. Seven records came back with their consolidation state, five of them active, with their original importance values.
 
 ## Honest limitations
 
-Namespaces are flat, so a per-user space is a naming convention. Recall has no default
-relevance floor, so a small space returns weak filler unless you filter it. Snapshots are
-capped per write, so a large space needs trimming by importance. And
-recency ranking relies on an `occurred_at` value the bot stores, because recall results carry
-no timestamp.
+Namespaces are flat, so a per-user space is a naming convention. Recall has no default relevance floor. Snapshots are capped per write. Recency ranking depends on an `occurred_at` I store, because recall results carry no timestamp at all. And as of this writing there are <<FILL: N>> real users rather than the three with ten memories each the brief asks for.
 
-## Try it
+## What to copy
 
-The repo runs against an offline mock with no credentials, so you can watch the
-consolidation behaviour before creating an account. <<FILL: links>>
+The repo runs against an offline mock with no credentials, so you can watch the consolidation before you create a Walrus Memory account. <<FILL: links>>
 
-If you are building anything that remembers, the thing worth copying is not the recall call.
-It is deciding what to forget.
+If you are building anything that remembers, the thing worth copying is not the recall call. It is deciding what to forget.
