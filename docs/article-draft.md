@@ -16,7 +16,7 @@ I checked before assuming. High-level `recall()` is top-K by distance with no re
 
 ## What I built
 
-Ranti is a memory-first assistant with one memory space and three independent surfaces: a Telegram bot, a terminal client, and a browser widget. Each writes to the same owner and namespace, and every memory records which surface produced it.
+Cheta is a memory-first assistant with four surfaces: a Telegram bot, a terminal client, a browser widget and a Chrome extension. They share one Walrus Memory account, and each surface identity gets its own namespace, so a memory does not silently follow you between clients: moving it is a deliberate act, the Memory Passport, and every memory records which surface produced it.
 
 On top of Walrus Memory I added the layer I was missing. On ingest, extract candidate facts, compare each against its nearest neighbours, and classify it as same, update, contradict or new before writing anything. On recall, fetch wide, drop superseded entries, collapse near-duplicate restatements, re-rank by semantic distance plus recency plus importance, then cap to a budget.
 
