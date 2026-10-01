@@ -40,7 +40,7 @@ Then deployment tested it by accident. My real users were on my laptop's instanc
 
 ## Honest limitations
 
-Namespaces are flat, so a per-user space is a naming convention. Recall has no default relevance floor. Snapshots are capped per write. Recency ranking depends on an `occurred_at` I store, because recall results carry no timestamp at all. And as of this writing there are <<FILL: N>> real users rather than the three with ten memories each the brief asks for.
+Namespaces are flat, so a per-user space is a naming convention. Recall has no default relevance floor. Snapshots are capped per write. Recency ranking depends on an `occurred_at` I store, because recall results carry no timestamp at all. And the numbers are honest rather than flattering: two real people are past ten stored memories, at 19 and 17, and a third has barely started.
 
 ## What to copy
 
