@@ -22,7 +22,7 @@ Screen: the portal at /app/portal.html, scrolled to the tagline.
 
 Do nothing. Let the words sit on screen.
 
-> "Every chatbot remembers. This one decides what to forget."
+> "Explain yourself once."
 
 Cut.
 
@@ -169,7 +169,7 @@ Stop recording.
 
 ## Title and description for YouTube
 
-Title: Cheta - a memory-first assistant that decides what to forget
+Title: Cheta - explain yourself once
 
 Description: Cheta stores what you tell it in your own memory space on Walrus,
 shared across Telegram, a command line, a web page and a browser extension. The
