@@ -34,7 +34,9 @@ So a turn no longer waits for persistence. It accepts each write, records a pend
 
 ## The proof I did not expect to need
 
-Walrus Memory cannot list memories, so the local index cannot be rebuilt by reading it back. I made the index self-describing: after each change the bot writes a compact snapshot of its index as a memory in a companion namespace. I deleted every row from the live index so that `/memories` returned zero, then called rebuild. Seven records came back with their consolidation state, five of them active, with their original importance values.
+Walrus Memory cannot list memories, so the local index cannot be rebuilt by reading it back. I made the index self-describing: after each change the bot writes a compact snapshot of its index as a memory in a companion namespace.
+
+Then deployment tested it by accident. My real users were on my laptop's instance and the hosted one started with an empty database. With zero memories in its local index, the hosted bot still recalled five of a returning user's memories, because recall runs against Walrus scoped by namespace rather than against application state. Rebuilding restored all six records, the four active and the two superseded, out of the snapshot. The memory survived the app being replaced, and so did the decisions made about it.
 
 ## Honest limitations
 

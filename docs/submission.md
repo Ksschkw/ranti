@@ -79,3 +79,36 @@ Post Tuesday to Thursday morning US Eastern, disclose authorship, answer every c
 - [ ] X post is live and tagged.
 - [ ] Bug issues are filed with reproduction steps and environment.
 - [ ] Promo post is live outside the Walrus and Sui ecosystem.
+
+## Current fills (2026-09-30)
+
+- Public GitHub repo: https://github.com/Ksschkw/ranti
+- Live deployment: https://ranti-gkn7.onrender.com (Render free, Docker,
+  `memory: walrus`, `llm: groq + gemini`)
+- Telegram bot: @Kosi_test_walrus1_bot, webhook mode, zero pending updates and no
+  delivery errors
+- LLM / runtime: Python 3.12, FastAPI, `memwal` 0.1.11 against the hosted
+  relayer. Primary Groq `qwen/qwen3.8-27b`, failover Google
+  `gemini-3.1-flash-lite`. No OpenAI or Anthropic model, so this also enters
+  Beyond the Big Two.
+- Bug bounty: four issues filed, https://github.com/MystenLabs/MemWal/issues/1061
+  through 1064, plus a comment on the existing dedupe thread
+  https://github.com/MystenLabs/MemWal/issues/1042#issuecomment-5920409813
+- Article: not yet published. Draft at docs/article-draft.md, 794 words.
+- X post: not yet published.
+- Promo post: not yet published.
+
+### Usage evidence, stated honestly
+
+Three real Telegram identities have used the bot, holding 6, 1 and 1 memories.
+Synthetic identities used for testing (telegram-9001, web-deploy-probe,
+cli-live-probe, integration-test-user) are excluded and must never be counted.
+
+The brief asks for three users with ten or more memories each. The user count is
+met and the depth is not, and the two identities holding one memory each still
+need confirming as distinct people rather than the account owner's own testing.
+
+### Still required before filing
+
+Publish the article, post on X with #WalrusMemory, post the promo outside the
+Walrus and Sui ecosystem, then complete the Airtable form with those links.
