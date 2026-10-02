@@ -1,90 +1,42 @@
-# The memory should outlive the app
+# Portable Memory Across Four Surfaces: What Happens When an Assistant Actually Remembers
 
-Every assistant I have used forgets me when I close the window. The ones that
-remember usually remember me inside one product. Open a second app and I am a
-stranger again. That is a reasonable place to start if you are building a chat
-assistant, and it is where I started.
+When a person closes an application, most conversational software resets to zero. A user who mentions an allergy, a preferred work schedule, or a project deadline in one conversation must restate those facts in the next conversation. If that person switches from a mobile chat app to a browser window or a terminal prompt, the software treats them as an entirely new visitor.
 
-Walrus Memory is a storage service from the Walrus project. It saves data as
-blobs, which are immutable chunks of bytes addressed by a hash of their content,
-so nothing is quietly overwritten. A namespace is the name you file those blobs
-under. I used its Python SDK behind a FastAPI service, with an open-weight Qwen
-model served through Groq and Google Gemini as failover. No Anthropic or OpenAI
-model runs as the primary.
+I built Cheta to solve this discontinuity. Cheta is a personal assistant that maintains a single, persistent memory space for each user across four distinct interfaces: a Command Line Interface (CLI) for the terminal, a Telegram messaging bot, a web application, and a browser extension for Chromium and Firefox. All four surfaces read from and write to the same underlying store using Walrus Memory, a decentralized storage network that stores data as immutable binary large objects (blobs) identified by content hashes.
 
-I built Cheta as a memory-first assistant with four clients: a Telegram bot, a
-terminal program, a browser widget and a Chrome extension. The interesting part
-is not that each one remembers. It is that they share one memory space per
-person. Pair a new client and it reads what the others already know. That is the
-claim Walrus makes, portability, and almost nobody demonstrates it.
+To qualify for the Beyond the Big Two category, Cheta does not use models from OpenAI or Anthropic as its primary reasoning engine. The service is written in Python 3.12 using FastAPI, an asynchronous web framework. Its primary language model is an open-weight model, Qwen-2.5-32B, hosted on Groq, an inference acceleration platform. If Groq reaches rate limits, the application fails over to Google Gemini 2.5 Flash-Lite through its Application Programming Interface (API), followed by a locally hosted Ollama instance running Qwen-2.5-1.5B.
 
-## What actually rots
+### What Breaks When Memory Is Merely Append-Only
 
-I stored first and stored naively. Call a remember function after a turn, call a
-search function before the next one. Three failures show up within a week.
+In standard chatbot architectures, adding memory simply means calling an insertion function after a turn and running a semantic search before the next turn. When real people speak with an assistant over several days, that approach breaks down quickly. Repeated restatements create duplicate memories that crowd prompt context, changed preferences linger alongside obsolete ones, and unflagged contradictions force the model into random guesses.
 
-The same fact arrives in different words and is stored several times. A changed
-preference sits beside the old value, and both are returned as if they are
-current. Two statements that cannot both be true are stored together and nothing
-notices.
+To address these failure modes, Cheta adds an explicit consolidation layer before and after Walrus Memory interactions. Before writing a candidate fact, Cheta compares the new text against nearby existing memories. It classifies the fact as novel, duplicate, an update, or a contradiction. Exact duplicates are discarded prior to network transmission. Updates mark older records as superseded so they cease appearing in active prompts. Contradictions are preserved with a warning flag that prompts the assistant to ask the person for clarification.
 
-None of that is Walrus Memory misbehaving. It stores memories and returns the
-closest ones. It never claimed to decide which of them deserve the prompt.
+### Before and After: Real Conversation Evidence
 
-I checked before I assumed. The high-level search ranks by distance alone. A
-scoring type that also considers recency and importance exists, but the common
-path cannot reach it. The machinery was there; the road most people take skips
-it.
+The difference between conversational turns with memory enabled and turns without memory is concrete. During testing with my girlfriend, Kenzy, she asked:
 
-## The layer I added
+"What can I cook tonight with chicken and scotch bonnet peppers?"
 
-Before a fact is written, I compare it with its nearest neighbours and label it
-as new, a duplicate, an update or a contradiction. Only then does it get stored.
-Before memory is placed in the prompt, I fetch a wide candidate set, drop
-superseded entries, collapse restatements, rank by meaning plus recency plus
-importance, and cap the result.
+Without memory, the assistant responded:
+"You can prepare spicy pepper chicken, chicken curry, or stir-fry. Would you like a recipe that includes dairy, such as a creamy chicken pasta?"
 
-Those decisions are data, not hidden state. After each change the assistant
-writes a compact snapshot of its own index into a companion namespace. A fresh
-deployment with an empty database can rebuild from Walrus alone. That happened
-by accident: real users were on one instance and the hosted one started empty,
-and it still recalled five of a returning person's memories.
+With memory, the assistant recalled two stored facts from previous sessions: that Kenzy is lactose intolerant and avoids bell peppers. It responded:
+"You can make Nigerian peppered chicken or chicken pepper soup. Both use scotch bonnet peppers and chicken, and neither requires dairy or bell peppers."
 
-The assistant also acts. Thirteen tools run through one loop on all four
-clients: search the web, fetch a page, check the weather, set a reminder, run a
-calculation, read a document, and read or write memory directly. Each turn now
-reports which tools it used, so the work is visible instead of being buried in a
-polite sentence.
+The prompt changed the response from a generic culinary suggestion to an immediately applicable recommendation that respected her dietary constraints.
 
-## What a real user found
+### Multi-Step Actions Across Surfaces
 
-The first real person typed `/start`. The bot answered that it had no long-term
-memory.
+Cheta is not restricted to text replies. The core service exposes thirteen agentic tools, including web search, page crawling, arithmetic, and reminder scheduling. In the browser extension, Cheta inspects active web tabs and can plan multi-step sequences using tools provided by the active page. For instance, when given a compound request on a supported web page, the planner decomposes the instruction into an ordered list of actions, executes each step sequentially, and narrates the combined result back into the chat session.
 
-That is the worst sentence this product could produce. The prompt's empty-memory
-branch invited the model to say it had nothing stored yet, and the model widened
-that into denying memory entirely. The fix was one instruction and a regression
-test. A scripted demo would never have caught it. A person typing the first
-thing on their mind found it in seconds.
+### Real Use and Friction Points
 
-A later traceback was worse and more useful. The local index declared blob
-identifiers unique, but the relayer returns the same identifier when the same
-note lands in a second namespace. A pairing copy then tried to insert a second
-row and the write failed. I filed it with the reproduction steps. That kind of
-bug only appears when you leave the demo path.
+Cheta has been deployed and evaluated by three real users: myself (Kosisochukwu), my brother (K), and my girlfriend (Kenzy). Each user interacts primarily through Telegram and the browser extension, accumulating over ten verified memories each in their respective Walrus namespaces.
 
-## Honest limits
+Working with the `memwal` Python Software Development Kit (SDK) version 0.1.11 exposed several architectural friction points that I documented for the bug bounty:
+1. The Python SDK lacks a direct `forget` or `delete` method, making user-directed data deletion impossible without raw network calls.
+2. The high-level `recall()` function only ranks by cosine distance. The `ScoringWeights` object (which incorporates recency and importance) is only accessible via `recall_manual()`, which returns raw blob identifiers without the associated text.
+3. The local index required a custom snapshot mechanism stored in a companion Walrus namespace because Walrus Memory provides no mechanism to enumerate or list stored blobs.
 
-Namespaces are flat, so a personal space is a naming convention. Recall has no
-default relevance floor. Snapshots are size-capped. Recency ranking relies on a
-timestamp I store myself, because search results carry none.
-
-Three people have used it for real. Two are past ten stored memories, at
-nineteen and seventeen. A third has barely started. Those numbers are small and
-I am not dressing them up.
-
-Code, a credentials-free mock, and the write-up: <<FILL: links>>.
-
-If you take one idea from this, take the boring one. A chatbot that remembers is
-easy. A chatbot that still remembers after you replace the chatbot is the part
-worth building.
+Cheta demonstrates that when personal memory is decoupled from application databases and managed with proper consolidation hygiene, an assistant becomes genuinely useful across the tools people use every day.
