@@ -62,8 +62,14 @@ Previously, `plan_page_tool` and `PagePlanSchema` could only return a single too
    - Provide visual feedback for each step ("Step 1/2: Running `add_to_cart`...", "Step 2/2: Running `apply_discount`...").
    - Safely pause and request user confirmation for state-changing or financial actions.
    - Feed back step outputs into the conversational transcript and send a final synthesis turn to Cheta.
-4. **Cross-Surface Agentic Tool Activity**:
+4. **Native In-Browser Page Tools (`extension/sidepanel.js`)**:
+   - Provide 5 universal native browser tools on any tab: `page_find_text`, `page_highlight_text`, `page_scroll_to`, `page_extract_links`, and `page_summarize`.
+   - Execute directly in page DOM via `browserApi.executeScript` without requiring third-party WebMCP servers.
+5. **Cross-Surface Agentic Tool Activity**:
    - Ensure tool execution across CLI, Telegram, Web, and Extension displays clear execution badges (`tool_activity`), keeping autonomous actions transparent.
+   - Deterministic tool dispatch in `OfflineLlm.complete_with_tools` ensures full offline / zero-credential verification of arithmetic, weather, search, reminders, and calendar tools.
+   - Web UI tools drawer with one-click interactive examples and local document attachment parsing.
+   - CLI commands `cheta tools` and `cheta file <path> "<question>"` for terminal workflows.
 
 ---
 
